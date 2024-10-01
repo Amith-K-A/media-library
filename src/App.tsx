@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import InfiniteScroll from 'react-infinite-scroll-component';
+import Masonry from 'react-masonry-css';
 import _, { debounce } from 'lodash';
 
-// Video Interface
 interface Video {
   id: number;
   url: string;
@@ -18,24 +18,41 @@ const formatDuration = (duration: number) => {
 };
 
 const getPerPage = () => {
-  if (window.innerWidth >= 1280) return 60; // For large screens
-  if (window.innerWidth >= 768) return 20;  // For medium screens
-  return 20; // For small screens
+  if (window.innerWidth >= 1280) return 30; // Adjust per-page item count for performance
+  if (window.innerWidth >= 768) return 20;
+  return 10;
 };
 
-// Custom Hook for video search
-const useVideoSearch = (query: string) => {
+// Tailwind Spinner Loader
+const Loader = () => (
+  <div className="flex justify-center items-center h-40">
+    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
+  </div>
+);
+
+function App() {
   const [videos, setVideos] = useState<Video[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [query, setQuery] = useState<string>('Trending');
   const API_KEY = 'YcwMJ3BxGg6DbelCgmc2iBGSqKpiXXchaIAqgYNKS7x97h0nBkvZk1f5';
 
+  // Debounce the query update to optimize the number of requests sent
+  const debouncedSetQuery = useCallback(
+    debounce((query: string) => {
+      setQuery(query);
+    }, 500),
+    []
+  );
+
+  // Helper function to fetch videos
   const fetchVideos = async (page: number, clearVideos: boolean = false) => {
     try {
       setLoading(true);
-      setError(null);
+      setError(null); // Clear any previous errors
       const perPage = getPerPage();
       const response = await fetch(
         `https://api.pexels.com/videos/search?query=${query}&page=${page}&per_page=${perPage}`,
@@ -51,6 +68,7 @@ const useVideoSearch = (query: string) => {
       }
 
       const data = await response.json();
+
       if (!data.videos || !Array.isArray(data.videos)) {
         throw new Error('Invalid response from API');
       }
@@ -62,10 +80,9 @@ const useVideoSearch = (query: string) => {
         duration: video.duration,
       }));
 
-      setVideos((prevVideos) =>
-        clearVideos ? [...fetchedVideos] : [...prevVideos, ...fetchedVideos]
-      );
+      setVideos((prevVideos) => clearVideos ? [...fetchedVideos] : [...prevVideos, ...fetchedVideos]);
 
+      // If fewer videos are returned than requested, assume we have all the data.
       if (fetchedVideos.length < perPage) {
         setHasMore(false);
       }
@@ -73,64 +90,45 @@ const useVideoSearch = (query: string) => {
       setLoading(false);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Something went wrong');
+      console.error('Error fetching videos:', error);
       setLoading(false);
     }
   };
 
-  const loadMoreVideos = () => {
-    if (!loading && hasMore) {
-      setPage((prevPage) => prevPage + 1);
-    }
-  };
-
-  // Fetch the first page whenever the query changes
+  // Handle search term changes: Reset videos and fetch the first page
   useEffect(() => {
-    fetchVideos(1, true); // Reset to page 1 and clear previous videos
-    setPage(1);
-    setHasMore(true); // Reset hasMore for the new query
+    if (query) {
+      fetchVideos(1, true);
+      setPage(1); // Reset page to 1
+      setHasMore(true); // Reset hasMore for new search term
+    }
   }, [query]);
 
-  // Fetch more videos when the page number changes
+  useEffect(() => {
+    if (searchTerm) {
+      debouncedSetQuery(searchTerm);
+    }
+  }, [searchTerm, debouncedSetQuery]);
+
+  // Fetch more data when the page changes (for pages > 1)
   useEffect(() => {
     if (page > 1) {
       fetchVideos(page);
     }
   }, [page]);
 
-  return { videos, loadMoreVideos, hasMore, error, loading };
-};
-const Loader = () => (
-  <div className="flex justify-center items-center h-40">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
-  </div>
-);
-
-function App() {
-  const [searchTerm, setSearchTerm] = useState<string>(''); // Empty by default
-  const [query, setQuery] = useState<string>('Trending'); // Default to 'Trending'
-
-  // Debounce the search input
-  const debouncedSetQuery = useCallback(
-    debounce((query: string) => {
-      setQuery(query);
-    }, 500),
-    []
-  );
-
-  // Use the custom hook for fetching videos
-  const { videos, loadMoreVideos, hasMore, error, loading } = useVideoSearch(query);
-
-  // Handle search term change (debounced)
-  useEffect(() => {
-    if (searchTerm.trim()) {
-      debouncedSetQuery(searchTerm);
+  const fetchMoreData = () => {
+    if (!loading && hasMore) {
+      setPage((prevPage) => prevPage + 1);
     }
-  }, [searchTerm, debouncedSetQuery]);
+  };
 
-  // Handle category click
-  const handleCategoryClick = (category: string) => {
-    setSearchTerm(''); // Clear the search input
-    setQuery(category); // Set the category as the query
+  // Breakpoint columns for the Masonry grid layout
+  const masonryBreakpoints = {
+    default: 4, // 4 columns for large screens
+    1024: 3,    // 3 columns for medium screens
+    768: 2,     // 2 columns for small screens
+    480: 1      // 1 column for extra small screens
   };
 
   return (
@@ -141,13 +139,13 @@ function App() {
         <ul className="space-y-2">
           <li
             className="cursor-pointer p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
-            onClick={() => handleCategoryClick('Cereal')}
+            onClick={() => setSearchTerm('cereal')}
           >
             Cereal
           </li>
           <li
             className="cursor-pointer p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
-            onClick={() => handleCategoryClick('Recipes')}
+            onClick={() => setSearchTerm('recipes')}
           >
             Recipes
           </li>
@@ -169,7 +167,7 @@ function App() {
         {/* Video content area */}
         <div
           id="scrollableDiv"
-          className="flex-1 mt-20 overflow-y-auto"
+          className="flex-1 mt-20 overflow-y-auto p-4" // Padding around the grid container
           style={{ height: '80vh', overflow: 'auto' }}
         >
           {/* Error handling */}
@@ -182,14 +180,18 @@ function App() {
           {/* Infinite Scroll */}
           <InfiniteScroll
             dataLength={videos.length} // The number of items loaded so far
-            next={loadMoreVideos} // Function to load more data
+            next={fetchMoreData} // Function to load more data
             hasMore={hasMore} // Whether there is more data to load
-            loader={<Loader />} // Loader to show while more items load
+            loader={<Loader />} // Updated loader
             endMessage={<p className="text-center">No more videos</p>} // Message when all items are loaded
             scrollableTarget="scrollableDiv" // Make sure InfiniteScroll uses the correct container
           >
-            {/* Video Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {/* Masonry Grid for Videos */}
+            <Masonry
+              breakpointCols={masonryBreakpoints}
+              className="flex w-auto" // Container class for the masonry grid
+              columnClassName="masonry-grid_column space-y-6 px-3" // Space between columns and items
+            >
               {videos.map((video) => (
                 <div
                   key={video.id}
@@ -199,7 +201,7 @@ function App() {
                     <img
                       src={video.image}
                       alt={`Video ${video.id}`}
-                      className="w-full h-40 object-cover"
+                      className="w-full h-auto object-cover"
                     />
                   </a>
                   <div className="p-2">
@@ -209,7 +211,7 @@ function App() {
                   </div>
                 </div>
               ))}
-            </div>
+            </Masonry>
           </InfiniteScroll>
         </div>
       </div>
