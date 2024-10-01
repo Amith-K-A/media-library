@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import InfiniteScroll from 'react-infinite-scroll-component';
+import _, { debounce } from 'lodash';
 
+// Video Interface
 interface Video {
   id: number;
   url: string;
@@ -21,27 +23,22 @@ const getPerPage = () => {
   return 20; // For small screens
 };
 
-function App() {
+// Custom Hook for video search
+const useVideoSearch = (query: string) => {
   const [videos, setVideos] = useState<Video[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>('cereal');
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const API_KEY = 'YcwMJ3BxGg6DbelCgmc2iBGSqKpiXXchaIAqgYNKS7x97h0nBkvZk1f5';
 
-  // Helper function to fetch videos
   const fetchVideos = async (page: number, clearVideos: boolean = false) => {
-    console.log(`Fetching page ${page} for search term: ${searchTerm}`);
-    if (!searchTerm) {
-      // setError('Please enter a search term');
-      return;
-    }
     try {
       setLoading(true);
+      setError(null);
       const perPage = getPerPage();
       const response = await fetch(
-        `https://api.pexels.com/videos/search?query=${searchTerm}&page=${page}&per_page=${perPage}`,
+        `https://api.pexels.com/videos/search?query=${query}&page=${page}&per_page=${perPage}`,
         {
           headers: {
             Authorization: API_KEY,
@@ -54,7 +51,6 @@ function App() {
       }
 
       const data = await response.json();
-
       if (!data.videos || !Array.isArray(data.videos)) {
         throw new Error('Invalid response from API');
       }
@@ -66,9 +62,10 @@ function App() {
         duration: video.duration,
       }));
 
-      setVideos((prevVideos) => clearVideos ? [...fetchedVideos] : [...prevVideos, ...fetchedVideos]);
+      setVideos((prevVideos) =>
+        clearVideos ? [...fetchedVideos] : [...prevVideos, ...fetchedVideos]
+      );
 
-      // If fewer videos are returned than requested, assume we have all the data.
       if (fetchedVideos.length < perPage) {
         setHasMore(false);
       }
@@ -76,30 +73,64 @@ function App() {
       setLoading(false);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Something went wrong');
-      console.error('Error fetching videos:', error);
       setLoading(false);
     }
   };
 
-  // Handle search term changes: Reset videos and fetch the first page
-  useEffect(() => {
-    // Fetch the first page and clear previous videos when the search term changes
-    fetchVideos(1, true);
-    setPage(1); // Reset page to 1
-    setHasMore(true); // Reset hasMore for new search term
-  }, [searchTerm]);
+  const loadMoreVideos = () => {
+    if (!loading && hasMore) {
+      setPage((prevPage) => prevPage + 1);
+    }
+  };
 
-  // Fetch more data when the page changes (for pages > 1)
+  // Fetch the first page whenever the query changes
+  useEffect(() => {
+    fetchVideos(1, true); // Reset to page 1 and clear previous videos
+    setPage(1);
+    setHasMore(true); // Reset hasMore for the new query
+  }, [query]);
+
+  // Fetch more videos when the page number changes
   useEffect(() => {
     if (page > 1) {
       fetchVideos(page);
     }
   }, [page]);
 
-  const fetchMoreData = () => {
-    if (!loading && hasMore) {
-      setPage((prevPage) => prevPage + 1);
+  return { videos, loadMoreVideos, hasMore, error, loading };
+};
+const Loader = () => (
+  <div className="flex justify-center items-center h-40">
+    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
+  </div>
+);
+
+function App() {
+  const [searchTerm, setSearchTerm] = useState<string>(''); // Empty by default
+  const [query, setQuery] = useState<string>('Trending'); // Default to 'Trending'
+
+  // Debounce the search input
+  const debouncedSetQuery = useCallback(
+    debounce((query: string) => {
+      setQuery(query);
+    }, 500),
+    []
+  );
+
+  // Use the custom hook for fetching videos
+  const { videos, loadMoreVideos, hasMore, error, loading } = useVideoSearch(query);
+
+  // Handle search term change (debounced)
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      debouncedSetQuery(searchTerm);
     }
+  }, [searchTerm, debouncedSetQuery]);
+
+  // Handle category click
+  const handleCategoryClick = (category: string) => {
+    setSearchTerm(''); // Clear the search input
+    setQuery(category); // Set the category as the query
   };
 
   return (
@@ -110,13 +141,13 @@ function App() {
         <ul className="space-y-2">
           <li
             className="cursor-pointer p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
-            onClick={() => setSearchTerm('cereal')}
+            onClick={() => handleCategoryClick('Cereal')}
           >
             Cereal
           </li>
           <li
             className="cursor-pointer p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
-            onClick={() => setSearchTerm('recipes')}
+            onClick={() => handleCategoryClick('Recipes')}
           >
             Recipes
           </li>
@@ -151,9 +182,9 @@ function App() {
           {/* Infinite Scroll */}
           <InfiniteScroll
             dataLength={videos.length} // The number of items loaded so far
-            next={fetchMoreData} // Function to load more data
+            next={loadMoreVideos} // Function to load more data
             hasMore={hasMore} // Whether there is more data to load
-            loader={<h4>Loading...</h4>} // Loader to show while more items load
+            loader={<Loader />} // Loader to show while more items load
             endMessage={<p className="text-center">No more videos</p>} // Message when all items are loaded
             scrollableTarget="scrollableDiv" // Make sure InfiniteScroll uses the correct container
           >
@@ -180,13 +211,6 @@ function App() {
               ))}
             </div>
           </InfiniteScroll>
-
-          {/* Loading Spinner */}
-          {!hasMore && (
-            <div className="text-center mt-4">
-              <p>No more videos to load.</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
