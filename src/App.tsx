@@ -19,7 +19,9 @@ function App() {
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false); // Control overall loading
+  const [loadingMore, setLoadingMore] = useState<boolean>(false); // Control loading for infinite scroll
+  const [allVideosLoaded, setAllVideosLoaded] = useState<boolean>(false); // Control grid rendering
   const [query, setQuery] = useState<string>('Trending');
   const [initialFetchCompleted, setInitialFetchCompleted] = useState<boolean>(false);
 
@@ -44,16 +46,18 @@ function App() {
     if (query) {
       (async () => {
         try {
-          setLoading(true);
+          setLoading(true); // Show skeleton until videos are fetched
+          setAllVideosLoaded(false); // Disable grid rendering until all videos are fetched
           const fetchedVideos = await fetchVideos(query, 1);
           setVideos(fetchedVideos);
           setPage(1);
           setHasMore(fetchedVideos.length > 0);
-          setLoading(false);
+          setLoading(false); // Hide skeleton after loading completes
+          setAllVideosLoaded(true); // Allow grid rendering
           setInitialFetchCompleted(true);
         } catch (error: unknown) {
           setError(error instanceof Error ? error.message : 'Something went wrong');
-          setLoading(false);
+          setLoading(false); // Hide skeleton in case of error
           setInitialFetchCompleted(true);
         }
       })();
@@ -65,13 +69,16 @@ function App() {
     if (page > 1) {
       (async () => {
         try {
+          setLoadingMore(true); // Show loader for infinite scroll
           const fetchedVideos = await fetchVideos(query, page);
           setVideos((prevVideos) => [...prevVideos, ...fetchedVideos]);
           if (fetchedVideos.length === 0) {
             setHasMore(false);
           }
+          setLoadingMore(false); // Hide loader after loading more videos
         } catch (error: unknown) {
           setError(error instanceof Error ? error.message : 'Something went wrong');
+          setLoadingMore(false);
         }
       })();
     }
@@ -100,7 +107,7 @@ function App() {
       <div className="flex-1 flex flex-col ml-64 p-6">
         <ErrorMessage error={error} />
 
-        {/* Show skeleton while loading */}
+        {/* Show skeleton while loading videos */}
         {loading && (
           <div className="flex-1 mt-20 p-4" style={{ height: '80vh' }}>
             <VideoGrid
@@ -113,33 +120,33 @@ function App() {
           </div>
         )}
 
-        {/* Show "no results" message if no videos are found, loading is complete, and initial fetch is done */}
+        {/* Show "no results" message if no videos are found after fetching */}
         {!loading && initialFetchCompleted && videos.length === 0 && (
           <div className="text-center text-gray-500 pt-40">
             <p>No results found for "{query}".</p>
           </div>
         )}
 
-        <div id="scrollableDiv" className="flex-1 mt-20 overflow-y-auto p-4" style={{ height: '80vh' }}>
-          {/* Infinite Scroll */}
-          {!loading && videos.length > 0 && (
+        {/* Show the video grid once loading is complete and all videos are fetched */}
+        {!loading && allVideosLoaded && videos.length > 0 && (
+          <div id="scrollableDiv" className="flex-1 mt-20 overflow-y-auto p-4" style={{ height: '80vh' }}>
             <InfiniteScroll
               dataLength={videos.length}
               next={() => setPage(page + 1)}
               hasMore={hasMore}
-              loader={<Loader />}
+              loader={loadingMore && <Loader />} 
               scrollableTarget="scrollableDiv"
             >
               <VideoGrid
                 videos={videos}
-                loading={false}
-                onSelect={handleSelectVideo} // Pass the video select handler
-                skeletonCount={0}
+                loading={false} // Grid items are ready to be displayed
+                onSelect={handleSelectVideo}
+                skeletonCount={0} // No skeletons needed when videos are loaded
                 masonryBreakpoints={masonryBreakpoints}
               />
             </InfiniteScroll>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Modal */}
         {selectedVideo && (

@@ -2,8 +2,8 @@
 
 import React from 'react';
 import Masonry from 'react-masonry-css';
-import Skeleton from './Skeleton';
 import VideoItem from './VideoItem';
+import Skeleton from './Skeleton';
 import { Video } from '../types/Video';
 
 interface VideoGridProps {
@@ -18,8 +18,8 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, loading, onSelect, skelet
   return (
     <Masonry
       breakpointCols={masonryBreakpoints}
-      className="flex w-auto"
-      columnClassName="masonry-grid_column space-y-6 px-3"
+      className="flex w-auto -ml-4"  // Adjust margins to ensure consistent grid
+      columnClassName="masonry-column pl-4 space-y-4" // Add padding-left to columns and spacing between items
     >
       {loading
         ? [...Array(skeletonCount)].map((_, index) => <Skeleton key={index} />)
