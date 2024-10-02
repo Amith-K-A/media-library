@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import Masonry from 'react-masonry-css';
 import _, { debounce } from 'lodash';
+import Modal from 'react-modal';
+
+// Required to bind modal to your app element
+Modal.setAppElement('#root');
 
 interface Video {
   id: number;
   url: string;
   image: string;
+  videoFile: string;
   duration: number;
 }
 
@@ -18,8 +23,8 @@ const formatDuration = (duration: number) => {
 };
 
 const getPerPage = () => {
-  if (window.innerWidth >= 1280) return 30; // Adjust per-page item count for performance
-  if (window.innerWidth >= 768) return 20;
+  if (window.innerWidth >= 1280) return 30;
+  if (window.innerWidth >= 768) return 10;
   return 10;
 };
 
@@ -32,6 +37,8 @@ const Loader = () => (
 
 function App() {
   const [videos, setVideos] = useState<Video[]>([]);
+  const [modalIsOpen, setModalIsOpen] = useState<boolean>(false);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
@@ -40,7 +47,8 @@ function App() {
   const [query, setQuery] = useState<string>('Trending');
   const API_KEY = 'YcwMJ3BxGg6DbelCgmc2iBGSqKpiXXchaIAqgYNKS7x97h0nBkvZk1f5';
 
-  // Debounce the query update to optimize the number of requests sent
+  const searchInputRef = useRef<HTMLInputElement>(null);  // Ref for the search input
+
   const debouncedSetQuery = useCallback(
     debounce((query: string) => {
       setQuery(query);
@@ -48,11 +56,19 @@ function App() {
     []
   );
 
-  // Helper function to fetch videos
+  const getNetworkSpeed = () => {
+    // Check if the Network Information API is supported
+    if ('connection' in navigator) {
+      const connection = (navigator as any).connection;
+      return connection.effectiveType; // Values like '4g', '3g', '2g', 'slow-2g'
+    }
+    return null; // Return null if the API is not supported
+  };
+  
   const fetchVideos = async (page: number, clearVideos: boolean = false) => {
     try {
       setLoading(true);
-      setError(null); // Clear any previous errors
+      setError(null);
       const perPage = getPerPage();
       const response = await fetch(
         `https://api.pexels.com/videos/search?query=${query}&page=${page}&per_page=${perPage}`,
@@ -62,45 +78,66 @@ function App() {
           },
         }
       );
-
+  
       if (!response.ok) {
         throw new Error('Failed to fetch videos');
       }
-
+  
       const data = await response.json();
-
+  
       if (!data.videos || !Array.isArray(data.videos)) {
         throw new Error('Invalid response from API');
       }
-
-      const fetchedVideos = data.videos.map((video: any) => ({
-        id: video.id,
-        url: video.url,
-        image: video.image,
-        duration: video.duration,
-      }));
-
+  
+      // Get the current network speed
+      const networkSpeed = getNetworkSpeed();
+  
+      const fetchedVideos = data.videos.map((video: any) => {
+        // Log the video files for debugging purposes
+        console.log("Video Files for video id", video.id, video.video_files);
+  
+        // Filter video files based on network speed
+        const selectedVideo = video.video_files.find((file: any) => {
+          // Choose video based on network speed
+          if (networkSpeed === '4g') {
+            // For fast connections, pick UHD or HD
+            return file.quality === 'uhd' || file.quality === 'hd';
+          } else if (networkSpeed === '3g') {
+            // For moderate connections, pick SD or HD
+            return file.quality === 'hd' || file.quality === 'sd';
+          } else {
+            // For slow connections (2g or below), pick the lowest quality (SD)
+            return file.quality === 'sd';
+          }
+        }) || video.video_files.reduce((prev: any, current: any) => prev.height > current.height ? prev : current); // Default to highest quality if no match
+  
+        return {
+          id: video.id,
+          url: video.url,
+          image: video.image,
+          videoFile: selectedVideo.link,  // Use the selected video link based on network speed
+          duration: video.duration,
+        };
+      });
+  
       setVideos((prevVideos) => clearVideos ? [...fetchedVideos] : [...prevVideos, ...fetchedVideos]);
-
-      // If fewer videos are returned than requested, assume we have all the data.
+  
       if (fetchedVideos.length < perPage) {
         setHasMore(false);
       }
-
+  
       setLoading(false);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Something went wrong');
-      console.error('Error fetching videos:', error);
       setLoading(false);
     }
   };
 
-  // Handle search term changes: Reset videos and fetch the first page
   useEffect(() => {
     if (query) {
       fetchVideos(1, true);
-      setPage(1); // Reset page to 1
-      setHasMore(true); // Reset hasMore for new search term
+      setPage(1);
+      setHasMore(true);
     }
   }, [query]);
 
@@ -110,7 +147,6 @@ function App() {
     }
   }, [searchTerm, debouncedSetQuery]);
 
-  // Fetch more data when the page changes (for pages > 1)
   useEffect(() => {
     if (page > 1) {
       fetchVideos(page);
@@ -123,17 +159,29 @@ function App() {
     }
   };
 
-  // Breakpoint columns for the Masonry grid layout
+  const openModal = (video: Video) => {
+    setSelectedVideo(video);
+    setModalIsOpen(true);
+    // Blur the search input when modal opens
+    if (searchInputRef.current) {
+      searchInputRef.current.blur();
+    }
+  };
+
+  const closeModal = () => {
+    setModalIsOpen(false);
+    setSelectedVideo(null);
+  };
+
   const masonryBreakpoints = {
-    default: 4, // 4 columns for large screens
-    1024: 3,    // 3 columns for medium screens
-    768: 2,     // 2 columns for small screens
-    480: 1      // 1 column for extra small screens
+    default: 4,
+    1024: 3,
+    768: 2,
+    480: 1
   };
 
   return (
     <div className="h-screen flex bg-gray-50">
-      {/* Sidebar */}
       <aside className="w-64 bg-gray-100 p-4 fixed h-full">
         <h2 className="font-bold text-lg mb-4">Categories</h2>
         <ul className="space-y-2">
@@ -153,61 +201,58 @@ function App() {
       </aside>
 
       <div className="flex-1 flex flex-col ml-64 p-6">
-        {/* Search bar */}
-        <div className="fixed top-0 left-64 right-0 p-6 bg-gray-50 z-10">
+        <div className="fixed top-0 left-64 right-0 p-6 bg-gray-50">
           <input
             type="text"
             placeholder="Search..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="p-2 border border-gray-300 rounded-lg w-full"
+            ref={searchInputRef}  // Assign ref to the input
           />
         </div>
 
-        {/* Video content area */}
         <div
           id="scrollableDiv"
-          className="flex-1 mt-20 overflow-y-auto p-4" // Padding around the grid container
+          className="flex-1 mt-20 overflow-y-auto p-4"
           style={{ height: '80vh', overflow: 'auto' }}
         >
-          {/* Error handling */}
           {error && (
             <div className="text-center text-red-600 mb-4">
               <p>{error}</p>
             </div>
           )}
 
-          {/* Infinite Scroll */}
           <InfiniteScroll
-            dataLength={videos.length} // The number of items loaded so far
-            next={fetchMoreData} // Function to load more data
-            hasMore={hasMore} // Whether there is more data to load
-            loader={<Loader />} // Updated loader
-            endMessage={<p className="text-center">No more videos</p>} // Message when all items are loaded
-            scrollableTarget="scrollableDiv" // Make sure InfiniteScroll uses the correct container
+            dataLength={videos.length}
+            next={fetchMoreData}
+            hasMore={hasMore}
+            loader={<Loader />}
+            endMessage={<p className="text-center">No more videos</p>}
+            scrollableTarget="scrollableDiv"
           >
-            {/* Masonry Grid for Videos */}
             <Masonry
               breakpointCols={masonryBreakpoints}
-              className="flex w-auto" // Container class for the masonry grid
-              columnClassName="masonry-grid_column space-y-6 px-3" // Space between columns and items
+              className="flex w-auto"
+              columnClassName="masonry-grid_column space-y-6 px-3"
             >
               {videos.map((video) => (
                 <div
                   key={video.id}
-                  className="border border-gray-200 rounded-lg overflow-hidden shadow-sm"
+                  className="relative border border-gray-200 rounded-lg overflow-hidden shadow-sm"
                 >
-                  <a href={video.url} target="_blank" rel="noopener noreferrer">
-                    <img
-                      src={video.image}
-                      alt={`Video ${video.id}`}
-                      className="w-full h-auto object-cover"
-                    />
-                  </a>
-                  <div className="p-2">
-                    <p className="font-semibold text-sm">
-                      Duration: {formatDuration(video.duration)}
-                    </p>
+                  <img
+                    src={video.image}
+                    alt={`Thumbnail for Video ${video.id}`}
+                    className="w-full h-auto object-cover"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <button
+                      className="bg-black bg-opacity-50 text-white text-2xl p-4 rounded-full hover:bg-opacity-75 transition-opacity"
+                      onClick={() => openModal(video)}
+                    >
+                      ▶
+                    </button>
                   </div>
                 </div>
               ))}
@@ -215,6 +260,43 @@ function App() {
           </InfiniteScroll>
         </div>
       </div>
+
+      {/* Modal */}
+      {selectedVideo && (
+        <Modal
+          isOpen={modalIsOpen}
+          onRequestClose={closeModal}  // Clicking outside will trigger this
+          className=" inset-0 grid place-self-center w-fit h-fit p-4"
+          overlayClassName="fixed flex justify-center inset-0 bg-black bg-opacity-75"
+          shouldCloseOnOverlayClick={true}  // Ensures closing on outside click
+        >
+          <div className="bg-white rounded-lg overflow-hidden w-[135vh]">
+            {/* Modal Header */}
+            <div className="p-4 flex justify-between items-center border-b">
+              <h2 className="font-bold text-lg">Video Details</h2>
+              <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            {/* Fixed Video Section */}
+            <div className="relative h-[85vh] flex justify-center items-center overflow-hidden">
+              <video
+                className="w-full h-full object-contain"
+                controls
+                autoPlay
+                src={selectedVideo?.videoFile}
+              ></video>
+            </div>
+            {/* Footer Section with Buttons */}
+            <div className="p-4 flex justify-between items-center">
+              <p className="text-sm font-medium">Duration: {formatDuration(selectedVideo?.duration || 0)}</p>
+              <div className="space-x-4">
+                <button className="bg-blue-500 text-white px-4 py-2 rounded-lg">Collect</button>
+                <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg">Like</button>
+                <button className="bg-green-500 text-white px-4 py-2 rounded-lg">Free Download</button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
