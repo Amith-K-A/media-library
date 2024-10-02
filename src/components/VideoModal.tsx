@@ -3,6 +3,8 @@
 import React from 'react';
 import Modal from 'react-modal';
 import { formatDuration } from '../helpers/helpers';
+// components/VideoModal.tsx
+
 import { Video } from '../types/Video';
 
 interface VideoModalProps {

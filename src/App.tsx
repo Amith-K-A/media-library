@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import InfiniteScroll from 'react-infinite-scroll-component';
-import Masonry from 'react-masonry-css';
 import { debounce } from 'lodash';
 import { fetchVideos } from './services/videoService';
 import SearchBar from './components/SearchBar';
 import Sidebar from './components/Sidebar';
 import Loader from './components/Loader';
 import VideoModal from './components/VideoModal';
+import VideoGrid from './components/VideoGrid';
+import ErrorMessage from './components/ErrorMessage';
 import { Video } from './types/Video';
+import { getSkeletonCount } from './utils/getSkeletonCount';
 
 function App() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [modalIsOpen, setModalIsOpen] = useState<boolean>(false);
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null); // Hold the selected video
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
@@ -24,7 +26,6 @@ function App() {
   // Debounced query setter
   const debouncedSetQuery = useCallback(
     debounce((newQuery: string) => {
-      // If the search input is cleared, reset query to 'Trending'
       if (newQuery === '') {
         setQuery('Trending');
       } else {
@@ -34,7 +35,6 @@ function App() {
     []
   );
 
-  // Update debounced query when searchTerm changes
   useEffect(() => {
     debouncedSetQuery(searchTerm);
   }, [searchTerm, debouncedSetQuery]);
@@ -77,6 +77,20 @@ function App() {
     }
   }, [page, query]);
 
+  // Function to open the modal
+  const handleSelectVideo = (video: Video) => {
+    setSelectedVideo(video); // Set the selected video
+    setModalIsOpen(true);    // Open the modal
+  };
+
+  // Masonry breakpoints for responsive grid
+  const masonryBreakpoints = {
+    default: 4,
+    1024: 3,
+    768: 2,
+    480: 1,
+  };
+
   return (
     <div className="h-screen flex bg-gray-50">
       <Sidebar setSearchTerm={setSearchTerm} />
@@ -84,15 +98,20 @@ function App() {
       <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
 
       <div className="flex-1 flex flex-col ml-64 p-6">
-        {/* Show error message */}
-        {error && (
-          <div className="text-center text-red-600 mb-4">
-            <p>{error}</p>
+        <ErrorMessage error={error} />
+
+        {/* Show skeleton while loading */}
+        {loading && (
+          <div className="flex-1 mt-20 p-4" style={{ height: '80vh' }}>
+            <VideoGrid
+              videos={[]}
+              loading={true}
+              onSelect={handleSelectVideo} // Pass the video select handler
+              skeletonCount={getSkeletonCount()}
+              masonryBreakpoints={masonryBreakpoints}
+            />
           </div>
         )}
-
-        {/* Show loader if loading */}
-        {loading && <div className="grid place-items-center h-full"><Loader /></div>}
 
         {/* Show "no results" message if no videos are found, loading is complete, and initial fetch is done */}
         {!loading && initialFetchCompleted && videos.length === 0 && (
@@ -111,35 +130,13 @@ function App() {
               loader={<Loader />}
               scrollableTarget="scrollableDiv"
             >
-              <Masonry
-                breakpointCols={{ default: 4, 1024: 3, 768: 2, 480: 1 }}
-                className="flex w-auto"
-                columnClassName="masonry-grid_column space-y-6 px-3"
-              >
-                {videos.map((video) => (
-                  <div
-                    key={video.id}
-                    className="relative border border-gray-200 rounded-lg overflow-hidden shadow-sm"
-                  >
-                    <img
-                      src={video.image}
-                      alt={`Thumbnail for Video ${video.id}`}
-                      className="w-full h-auto object-cover"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <button
-                        className="bg-black bg-opacity-50 text-white text-2xl p-4 rounded-full"
-                        onClick={() => {
-                          setSelectedVideo(video);
-                          setModalIsOpen(true);
-                        }}
-                      >
-                        ▶
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </Masonry>
+              <VideoGrid
+                videos={videos}
+                loading={false}
+                onSelect={handleSelectVideo} // Pass the video select handler
+                skeletonCount={0}
+                masonryBreakpoints={masonryBreakpoints}
+              />
             </InfiniteScroll>
           )}
         </div>
