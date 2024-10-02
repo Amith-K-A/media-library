@@ -39,6 +39,7 @@ export const fetchVideos = async (query: string, page: number) => {
       image: video.image,
       videoFile: selectedVideo.link,
       duration: video.duration,
+      user: video.user,
     };
   });
 

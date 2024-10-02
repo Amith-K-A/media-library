@@ -17,6 +17,7 @@ const VideoItem: React.FC<VideoItemProps> = ({ video, onSelect }) => {
       {/* Video Thumbnail */}
       <img
         src={video.image}
+        
         alt={`Thumbnail for ${video.id}`}
         className="w-full h-auto transform transition-transform duration-300 ease-in-out group-hover:scale-105"
       />
