@@ -34,7 +34,7 @@ function App() {
         setQuery(newQuery);
       }
     }, 500),
-    []
+    [setQuery] // Adding setQuery to the dependency array.
   );
 
   useEffect(() => {
