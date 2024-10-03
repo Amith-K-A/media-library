@@ -1,6 +1,7 @@
 // services/videoService.ts
 
-import { getPerPage, getNetworkSpeed } from '../helpers/helpers';
+import { getPerPage } from '../helpers/helpers';
+import { Video } from '../models/Video';
 
 const API_KEY = 'YcwMJ3BxGg6DbelCgmc2iBGSqKpiXXchaIAqgYNKS7x97h0nBkvZk1f5';
 
@@ -24,24 +25,8 @@ export const fetchVideos = async (query: string, page: number) => {
     throw new Error('Invalid response from API');
   }
 
-  const networkSpeed = getNetworkSpeed();
-
-  const fetchedVideos = data.videos.map((video: any) => {
-    const selectedVideo = video.video_files.find((file: any) => {
-      if (networkSpeed === '4g') return file.quality === 'uhd' || file.quality === 'hd';
-      if (networkSpeed === '3g') return file.quality === 'hd' || file.quality === 'sd';
-      return file.quality === 'sd';
-    }) || video.video_files.reduce((prev: any, current: any) => prev.height > current.height ? prev : current);
-
-    return {
-      id: video.id,
-      url: video.url,
-      image: video.image,
-      videoFile: selectedVideo.link,
-      duration: video.duration,
-      user: video.user,
-    };
-  });
+  // Map over videos and create new Video instances
+  const fetchedVideos = data.videos.map((video: any) => new Video(video));
 
   return fetchedVideos;
 };
