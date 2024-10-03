@@ -1,10 +1,11 @@
-// services/videoService.ts
-
 import { getPerPage } from '../helpers/helpers';
 import { Video } from '../models/Video';
 
-const API_KEY = process.env.API_KEY || '';
+const API_KEY = process.env.REACT_APP_API_KEY || '';
 
+if (!API_KEY) {
+  throw new Error('Missing API key. Please ensure API_KEY is set in your environment.');
+}
 
 export const fetchVideos = async (query: string, page: number) => {
   const perPage = getPerPage();
