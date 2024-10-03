@@ -3,7 +3,8 @@
 import { getPerPage } from '../helpers/helpers';
 import { Video } from '../models/Video';
 
-const API_KEY = 'YcwMJ3BxGg6DbelCgmc2iBGSqKpiXXchaIAqgYNKS7x97h0nBkvZk1f5';
+const API_KEY = process.env.API_KEY || '';
+
 
 export const fetchVideos = async (query: string, page: number) => {
   const perPage = getPerPage();
