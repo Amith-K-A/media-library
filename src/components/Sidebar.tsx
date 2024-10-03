@@ -5,7 +5,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ setSearchTerm }) => {
-  const [activeCategory, setActiveCategory] = useState<string>('Trending'); // Track the active category
+  const [activeCategory, setActiveCategory] = useState<string>('Trending');
 
   const categories = [
     'AI',
@@ -20,17 +20,16 @@ const Sidebar: React.FC<SidebarProps> = ({ setSearchTerm }) => {
     'Art',
   ];
 
-  // Function to handle category click
   const handleCategoryClick = (category: string) => {
     setSearchTerm(category);
-    setActiveCategory(category); // Set the clicked category as active
+    setActiveCategory(category);
   };
 
   return (
     <aside className="w-64 bg-gray-100 p-4 fixed h-full">
-      <h2 
-        className="font-bold text-lg mb-4 cursor-pointer" // Added cursor-pointer for visual indication
-        onClick={() => window.location.reload()} // Added onClick event to reload the page when clicked
+      <h2
+        className="font-bold text-lg mb-4 cursor-pointer"
+        onClick={() => window.location.reload()}
       >
         Categories
       </h2>
@@ -41,11 +40,11 @@ const Sidebar: React.FC<SidebarProps> = ({ setSearchTerm }) => {
             className={`cursor-pointer py-3 px-4 rounded-lg 
               ${
                 activeCategory === category
-                  ? 'bg-blue-500 text-white font-bold' // Active category highlighting
-                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300 hover:text-gray-900' // Hover effect for non-active categories
+                  ? 'bg-blue-500 text-white font-bold'
+                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300 hover:text-gray-900'
               }`}
             onClick={() => handleCategoryClick(category)}
-            aria-selected={activeCategory === category} // Added aria-selected for accessibility
+            aria-current={activeCategory === category ? 'true' : undefined} // Use aria-current for active category
           >
             {category}
           </li>
